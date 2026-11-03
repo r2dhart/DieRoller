@@ -7,112 +7,124 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-# Constants for easy maintainability
+# Constants
 MIN_DICE_TYPE = 1
 MAX_DICE_TYPE = 100
-
-@dataclass(frozen=True)
-class DiceComponents:
-    """Data structure for parsed dice expressions."""
-    num_dice: int
-    dice_type: int
-    modifier_sign: int
-    modifier_value: int
 
 class DiceExpressionError(ValueError):
     """Custom exception for dice expression parsing errors."""
 
-def parse_dice_expression(expression: str) -> DiceComponents:
-    """
-    Parse a dice expression string into a DiceComponents object using Regex.
-    Example inputs: '3d6', '3d6+2', '1d20-5'
-    """
-    expression = expression.strip()
+@dataclass(frozen=True)
+class DiceComponents:
+    """Data structure for parsed dice expressions (Metadata)."""
+    num_dice: int
+    dice_type: int
+    modifier_sign: int
+    modifier_value: int
+    drop_lowest: bool
 
-    # Regex breakdown:
-    # ^(\d+)     : Start with one or more digits (number of dice)
-    # d          : The 'd' separator
-    # (\d+)      : One or more digits (dice type)
-    # ([+-]\d+)? : Optional group: a plus or minus followed by digits (modifier)
-    # $          : End of string
-    pattern = r"^(\d+)d(\d+)([+-]\d+)?$"
-    match = re.fullmatch(pattern, expression)
+    @classmethod
+    def from_expression(cls, expression: str) -> DiceComponents:
+        """Parses a string and returns a DiceComponents instance."""
+        expression = expression.strip()
+        # Regex: num_dice, d, dice_type, optional modifier, optional -drop
+        pattern = r"^(\d+)d(\d+)([+-]\d+)?(-drop)?$"
+        match = re.fullmatch(pattern, expression)
 
-    if not match:
-        raise DiceExpressionError(
-            f"Invalid format '{expression}'. Expected format like '3d6', '3d6+2', or '1d20-5'."
-        )
+        if not match:
+            raise DiceExpressionError(
+                f"Invalid format '{expression}'. Expected format like '3d6', '3d6+2', or '4d6-drop'."
+            )
 
-    num_dice_str, dice_type_str, modifier_str = match.groups()
+        num_dice_str, dice_type_str, modifier_str, drop_str = match.groups()
 
-    try:
+        try:
             num_dice = int(num_dice_str)
             dice_type = int(dice_type_str)
-    except ValueError:
-        # This is technically handled by \d+ in regex, but kept for safety
-        raise DiceExpressionError(f"Invalid numbers in expression '{expression}'.")
+        except ValueError:
+            raise DiceExpressionError(f"Invalid numbers in expression '{expression}'.")
 
-    # Validation
-    if dice_type < MIN_DICE_TYPE or dice_type > MAX_DICE_TYPE:
-        raise DiceExpressionError(
-            f"Invalid die type {dice_type}. Supported range: {MIN_DICE_TYPE}-{MAX_DICE_TYPE}."
+        if dice_type < MIN_DICE_TYPE or dice_type > MAX_DICE_TYPE:
+            raise DiceExpressionError(
+                f"Invalid die type {dice_type}. Supported range: {MIN_DICE_TYPE}-{MAX_DICE_TYPE}."
+            )
+
+        modifier_sign = 0
+        modifier_value = 0
+        if modifier_str:
+            modifier_sign = 1 if modifier_str.startswith('+') else -1
+            modifier_value = int(modifier_str[1:])
+
+        drop_lowest = drop_str is not None and drop_str == "-drop"
+
+        return cls(
+            num_dice=num_dice,
+            dice_type=dice_type,
+            modifier_sign=modifier_sign,
+            modifier_value=modifier_value,
+            drop_lowest=drop_lowest
         )
 
-    # Parse Modifier
-    modifier_sign = 0
-    modifier_value = 0
-    if modifier_str:
-        modifier_sign = 1 if modifier_str.startswith('+') else -1
-        modifier_value = int(modifier_str[1:])  # Strip the + or - sign
+@dataclass(frozen=True)
+class Roll:
+    """Represents the result of a dice roll."""
+    results: list[int]
+    total: int
+    components: DiceComponents
 
-    return DiceComponents(
-        num_dice=num_dice,
-        dice_type=dice_type,
-        modifier_sign=modifier_sign,
-        modifier_value=modifier_value
-    )
+    @classmethod
+    def from_expression(cls, expression: str) -> Roll:
+        """Factory method to parse a string and generate a Roll object."""
+        # 1. Parse the metadata
+        components = DiceComponents.from_expression(expression)
 
-def roll_dice(expression: str) -> tuple[list[int], int, DiceComponents]:
-    """
-    Roll dice and apply modifier.
+        # 2. Perform the roll
+        results = [random.randint(1, components.dice_type) for _ in range(components.num_dice)]
 
-    Returns:
-        A tuple of (results_list, final_total, components_object).
-    """
-    components = parse_dice_expression(expression)
+        # 3. Handle logic (like dropping the lowest)
+        if components.drop_lowest and len(results) > 1:
+            results.sort()
+            results.pop(0)
 
-    # Performance: Use list comprehension for rolling
-    results = [random.randint(1, components.dice_type) for _ in range(components.num_dice)]
+        # 4. Calculate final total
+        total_modifier = components.modifier_sign * components.modifier_value
+        final_total = sum(results) + total_modifier
 
-    total_modifier = components.modifier_sign * components.modifier_value
-    final_total = sum(results) + total_modifier
+        return cls(
+            results=results,
+            total=final_total,
+            components=components
+        )
 
-    return results, final_total, components
+    @property
+    def summary(self) -> str:
+        """Returns a formatted string of the roll result."""
+        if self.components.modifier_sign != 0:
+            sign_str = "+" if self.components.modifier_sign == 1 else "-"
+            return f"Rolls: {self.results}{sign_str}{self.components.modifier_value}"
+        return f"Rolls: {self.results}"
 
 
 def main() -> None:
     """Main loop for the dice roller application."""
     while True:
-        user_input = input("Enter the dice roll (e.g., '1d4', '3d6+2', etc.): ")
+        user_input = input("Enter the dice roll (e.g., '1d4', '3d6+2', '4d6-drop'): ")
 
         if user_input.lower() == 'quit':
             print("Goodbye!")
             break
 
         try:
-            results, total, components = roll_dice(user_input)
+            # Instead of a tuple, we get a single object with properties
+            roll = Roll.from_expression(user_input)
 
-            # Get modifier for display
-            components = parse_dice_expression(user_input)
+            # Access properties directly
+            print(roll.summary)
+            print(f"Total: {roll.total}")
 
-            # Display in your desired format
-            if components.modifier_sign != 0:
-                sign_str = "+" if components.modifier_sign == 1 else "-"
-                print(f"Rolls: {results}{sign_str}{components.modifier_value}")
-            else:
-                print(f"Rolls: {results}")
+            if roll.components.drop_lowest:
+                print("(Lowest roll dropped)")
 
-            print(f"Total: {total}")
         except (ValueError, IndexError, DiceExpressionError) as e:
             print(f"Invalid input: {e}")
 
