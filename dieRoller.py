@@ -29,7 +29,14 @@ class DiceComponents:
     def from_expression(cls, expression: str) -> DiceComponents:
         """Parses a string and returns a DiceComponents instance."""
         expression = expression.strip()
-        # Regex: num_dice, d, dice_type, optional modifier, optional -drop, optional -adv/-dis
+        # Regex breakdown:
+        # ^(\d+)       : Start with one or more digits (number of dice)
+        # d            : The 'd' separator
+        # (\d+)        : One or more digits (dice type)
+        # ([+-]\d+)?   : Optional group: a plus or minus followed by digits (modifier)
+        # (-drop\d*)?  : Optional group: "-drop" followed by optional digits (drop count)
+        # (-adv|-dis)? : Optional group: either "-adv" or "-dis" (Advantage/Disadvantage)
+        # $            : End of string
         pattern = r"^(\d+)d(\d+)([+-]\d+)?(-drop\d*)?(-adv|-dis)?$"
         match = re.fullmatch(pattern, expression)
 
