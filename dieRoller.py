@@ -5,7 +5,6 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 # Constants
 MIN_DICE_TYPE = 1
