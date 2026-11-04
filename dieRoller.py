@@ -21,22 +21,24 @@ class DiceComponents:
     dice_type: int
     modifier_sign: int
     modifier_value: int
-    drop_lowest: bool
+    drop_count: int
+    advantage: bool
+    disadvantage: bool
 
     @classmethod
     def from_expression(cls, expression: str) -> DiceComponents:
         """Parses a string and returns a DiceComponents instance."""
         expression = expression.strip()
-        # Regex: num_dice, d, dice_type, optional modifier, optional -drop
-        pattern = r"^(\d+)d(\d+)([+-]\d+)?(-drop)?$"
+        # Regex: num_dice, d, dice_type, optional modifier, optional -drop, optional -adv/-dis
+        pattern = r"^(\d+)d(\d+)([+-]\d+)?(-drop\d*)?(-adv|-dis)?$"
         match = re.fullmatch(pattern, expression)
 
         if not match:
             raise DiceExpressionError(
-                f"Invalid format '{expression}'. Expected format like '3d6', '3d6+2', or '4d6-drop'."
+                f"Invalid format '{expression}'. Expected format like '3d6', '3d6+2', '4d6-drop', '2d20-adv', or '2d20-dis'."
             )
 
-        num_dice_str, dice_type_str, modifier_str, drop_str = match.groups()
+        num_dice_str, dice_type_str, modifier_str, drop_str, adv_dis_str = match.groups()
 
         try:
             num_dice = int(num_dice_str)
@@ -55,14 +57,34 @@ class DiceComponents:
             modifier_sign = 1 if modifier_str.startswith('+') else -1
             modifier_value = int(modifier_str[1:])
 
-        drop_lowest = drop_str is not None and drop_str == "-drop"
+        drop_count = 0
+        if drop_str:
+            if drop_str == "-drop":
+                # Default to dropping 1 die if no number is provided
+                drop_count = 1
+            else:
+                try:
+                    # Extract digits from "-dropN"
+                    drop_count = int(drop_str.replace("-drop", ""))
+                except ValueError:
+                    raise DiceExpressionError(f"Invalid drop count in expression '{expression}'.")
+
+            if drop_count >= num_dice:
+                raise DiceExpressionError(
+                    f"Invalid drop count {drop_count}. You must leave at least one die remaining from {num_dice}."
+                )
+
+        advantage = adv_dis_str == "-adv"
+        disadvantage = adv_dis_str == "-dis"
 
         return cls(
             num_dice=num_dice,
             dice_type=dice_type,
             modifier_sign=modifier_sign,
             modifier_value=modifier_value,
-            drop_lowest=drop_lowest
+            drop_count=drop_count,
+            advantage=advantage,
+            disadvantage=disadvantage
         )
 
 @dataclass(frozen=True)
@@ -79,12 +101,25 @@ class Roll:
         components = DiceComponents.from_expression(expression)
 
         # 2. Perform the roll
-        results = [random.randint(1, components.dice_type) for _ in range(components.num_dice)]
+        # Advantage/Disadvantage typically requires rolling 2 dice
+        if components.advantage or components.disadvantage:
+            results = [random.randint(1, components.dice_type),
+                        random.randint(1, components.dice_type)]
+
+            if components.advantage:
+                results = [max(results)]
+            elif components.disadvantage:
+                results = [min(results)]
+        else:
+            results = [random.randint(1, components.dice_type) for _ in range(components.num_dice)]
 
         # 3. Handle logic (like dropping the lowest)
-        if components.drop_lowest and len(results) > 1:
+        # Note: drop_count logic is checked here for standard rolls.
+        # Advantage/Disadvantage logic is already handled above.
+        if components.drop_count > 0 and len(results) > components.drop_count:
             results.sort()
-            results.pop(0)
+            # Remove the 'drop_count' lowest results
+            results = results[components.drop_count:]
 
         # 4. Calculate final total
         total_modifier = components.modifier_sign * components.modifier_value
@@ -99,6 +134,12 @@ class Roll:
     @property
     def summary(self) -> str:
         """Returns a formatted string of the roll result."""
+        status_msg = ""
+        if self.components.advantage:
+            status_msg = " (Advantage)"
+        elif self.components.disadvantage:
+            status_msg = " (Disadvantage)"
+
         if self.components.modifier_sign != 0:
             sign_str = "+" if self.components.modifier_sign == 1 else "-"
             return f"Rolls: {self.results}{sign_str}{self.components.modifier_value}"
@@ -122,12 +163,15 @@ def main() -> None:
             print(roll.summary)
             print(f"Total: {roll.total}")
 
-            if roll.components.drop_lowest:
-                print("(Lowest roll dropped)")
+            if roll.components.drop_count > 0:
+                print(f"({roll.components.drop_count} lowest roll(s) dropped)")
+            elif roll.components.advantage:
+                print("(Advantage applied: kept highest)")
+            elif roll.components.disadvantage:
+                print("(Disadvantage applied: kept lowest)")
 
         except (ValueError, IndexError, DiceExpressionError) as e:
             print(f"Invalid input: {e}")
-
 
 if __name__ == '__main__':
     main()
