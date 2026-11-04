@@ -142,8 +142,8 @@ class Roll:
 
         if self.components.modifier_sign != 0:
             sign_str = "+" if self.components.modifier_sign == 1 else "-"
-            return f"Rolls: {self.results}{sign_str}{self.components.modifier_value}"
-        return f"Rolls: {self.results}"
+            return f"Rolls: {self.results}{sign_str}{self.components.modifier_value}{status_msg}"
+        return f"Rolls: {self.results}{status_msg}"
 
 def print_help() -> None:
     """Prints the help menu for the dice roller."""
