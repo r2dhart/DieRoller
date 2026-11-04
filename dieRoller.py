@@ -147,12 +147,27 @@ class Roll:
 
 def main() -> None:
     """Main loop for the dice roller application."""
+    # Initialize an empty list to store recent rolls
+    history: list[Roll] = []
+    MAX_HISTORY = 10  # Keep the last 10 rolls
+
     while True:
         user_input = input("Enter the dice roll (e.g., '1d4', '3d6+2', '4d6-drop'): ")
 
         if user_input.lower() == 'quit':
             print("Goodbye!")
             break
+
+        if user_input.lower() == 'history' or user_input.lower() == 'h':
+            if not history:
+                print("No history yet.")
+            else:
+                print(f"--- Last {len(history)} Rolls ---")
+                # Print history in reverse order (most recent first)
+                for i, roll in enumerate(reversed(history), 1):
+                    print(f"{i}. {roll.summary} | Total: {roll.total}")
+            continue
+
 
         try:
             # Instead of a tuple, we get a single object with properties
@@ -168,6 +183,12 @@ def main() -> None:
                 print("(Advantage applied: kept highest)")
             elif roll.components.disadvantage:
                 print("(Disadvantage applied: kept lowest)")
+
+            # Add the new roll to history
+            history.append(roll)
+            # Ensure we only keep the last MAX_HISTORY rolls
+            if len(history) > MAX_HISTORY:
+                history.pop(0)
 
         except (ValueError, IndexError, DiceExpressionError) as e:
             print(f"Invalid input: {e}")
