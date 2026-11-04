@@ -123,7 +123,7 @@ class Roll:
         # 3. Handle logic (like dropping the lowest)
         # Note: drop_count logic is checked here for standard rolls.
         # Advantage/Disadvantage logic is already handled above.
-        if components.drop_count > 0 and len(results) > components.drop_count:
+        if c.drop_count > 0 and len(results) > components.drop_count:
             results.sort()
             # Remove the 'drop_count' lowest results
             results = results[components.drop_count:]
