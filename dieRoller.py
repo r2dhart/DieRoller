@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass
+from typing import Optional
 
 # Constants
 MIN_DICE_TYPE = 1
@@ -144,6 +145,46 @@ class Roll:
             return f"Rolls: {self.results}{sign_str}{self.components.modifier_value}"
         return f"Rolls: {self.results}"
 
+def print_help() -> None:
+    """Prints the help menu for the dice roller."""
+    help_text = """
+--- DieRoller Help Menu ---
+Supported Syntax:
+  - Basic:      [num]d[type] (e.g., 3d6)
+  - Modifiers:  [num]d[type][+/-][mod] (e.g., 3d6+2, 1d20-1)
+  - Drop Logic: [num]d[type]-drop (drops lowest 1)
+                [num]d[type]-dropN (drops N lowest, e.g., 4d6-drop2)
+  - Advantage:  2d20-adv (rolls 2, keeps highest)
+  - Disadvantage: 2d20-dis (rolls 2, keeps lowest)
+
+Commands:
+  - history / h : Show the last 10 rolls
+  - help / ?    : Show this menu
+  - quit        : Exit the application
+    """
+    print(help_text)
+
+def process_input(user_input: str, history: list[Roll]) -> tuple[Optional[Roll], str]:
+    """
+    Processes the user input and returns a tuple of (Roll object or None, action_type).
+    The action_type can be 'roll', 'history', 'help', 'quit', or 'error: <message>'.
+    """
+    user_input_clean = user_input.strip().lower()
+
+    if user_input_clean == 'quit':
+        return None, 'quit'
+
+    if user_input_clean in ('history', 'h'):
+        return None, 'history'
+
+    if user_input_clean in ('help', '?'):
+        return None, 'help'
+
+    try:
+        roll = Roll.from_expression(user_input)
+        return roll, 'roll'
+    except (ValueError, IndexError, DiceExpressionError) as e:
+        return None, f'error: {e}'
 
 def main() -> None:
     """Main loop for the dice roller application."""
@@ -153,12 +194,13 @@ def main() -> None:
 
     while True:
         user_input = input("Enter the dice roll (e.g., '1d4', '3d6+2', '4d6-drop'): ")
+        roll, action = process_input(user_input, history)
 
-        if user_input.lower() == 'quit':
+        if action == 'quit':
             print("Goodbye!")
             break
 
-        if user_input.lower() == 'history' or user_input.lower() == 'h':
+        elif action == 'history':
             if not history:
                 print("No history yet.")
             else:
@@ -168,12 +210,16 @@ def main() -> None:
                     print(f"{i}. {roll.summary} | Total: {roll.total}")
             continue
 
+        elif action =='help':
+            print_help()
+            continue
 
-        try:
-            # Instead of a tuple, we get a single object with properties
-            roll = Roll.from_expression(user_input)
+        elif action.startswith('error: '):
+            print(f"Invalid input: {action.split(': ', 1)[1]}")
+            continue
 
-            # Access properties directly
+        elif roll:
+            # Print the current result
             print(roll.summary)
             print(f"Total: {roll.total}")
 
@@ -189,9 +235,6 @@ def main() -> None:
             # Ensure we only keep the last MAX_HISTORY rolls
             if len(history) > MAX_HISTORY:
                 history.pop(0)
-
-        except (ValueError, IndexError, DiceExpressionError) as e:
-            print(f"Invalid input: {e}")
 
 if __name__ == '__main__':
     main()

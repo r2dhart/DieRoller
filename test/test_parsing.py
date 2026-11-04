@@ -46,3 +46,18 @@ def test_invalid_drop_count():
 
     with pytest.raises(DiceExpressionError):
         DiceComponents.from_expression("2d20-drop3")
+
+# NEW: Specific drop logic edge cases
+def test_drop_logic_boundaries():
+    """Test drop counts that are exactly allowed and just barely disallowed."""
+    # 4 dice, drop 3 (allowed)
+    comp = DiceComponents.from_expression("4d6-drop3")
+    assert comp.drop_count == 3
+
+    # 2 dice, drop 1 (allowed)
+    comp = DiceComponents.from_expression("2d20-drop1")
+    assert comp.drop_count == 1
+
+    # 1 die, drop 1 (disallowed)
+    with pytest.raises(DiceExpressionError):
+        DiceComponents.from_expression("1d20-drop1")
